@@ -1,12 +1,23 @@
 import React, { createElement, Component } from 'react';
 import hoistNonReactStatics from 'hoist-non-react-statics';
 import { connect } from 'react-redux';
-import mount, { createEphemeral, destroyEphemeral, lookup, toEphemeral } from 'redux-ephemeral';
+import { createEphemeral, destroyEphemeral, lookup, toEphemeral, ephemeralReducer } from 'redux-ephemeral';
 
 import './index.html';
 
-export function enhanceWithPrivateProps(reducer) {
-  return mount('lcl', reducer);
+let PRIVATE_PROPS_ROOT_KEY = 'lcl';
+
+export function combineWithPrivateProps(key, reducersObj) {
+  debugger
+  if (typeof key === 'object') {
+    reducersObj = key;
+  } else {
+    PRIVATE_PROPS_ROOT_KEY = key;
+  }
+
+  return Object.assign(reducersObj, {
+    [PRIVATE_PROPS_ROOT_KEY]: ephemeralReducer,
+  });
 }
 
 function once(f) {
@@ -73,7 +84,7 @@ export function withProps({
 
     function mapStateToPrivateProps(state, ownProps) {
       return {
-        private: {...lookup(state.lcl, getPrivateKey(ownProps))},
+        private: {...lookup(state[PRIVATE_PROPS_ROOT_KEY], getPrivateKey(ownProps))},
         ...ownProps,
       };
     }
