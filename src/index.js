@@ -117,6 +117,8 @@ export function withProps({
       store: React.PropTypes.object,
     };
 
+    WithSetProps.displayName =  `WithSetProps(${component.name || 'Component'})`;
+
     WithSetProps.propTypes = {
       store: React.PropTypes.object,
     };
