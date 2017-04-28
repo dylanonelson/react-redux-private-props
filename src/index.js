@@ -8,7 +8,6 @@ import './index.html';
 let PRIVATE_PROPS_ROOT_KEY = 'lcl';
 
 export function combineWithPrivateProps(key, reducersObj) {
-  debugger
   if (typeof key === 'object') {
     reducersObj = key;
   } else {
