@@ -1,7 +1,7 @@
 import React, { createElement, Component } from 'react';
 import hoistNonReactStatics from 'hoist-non-react-statics';
 import { connect } from 'react-redux';
-import mount, { createEphemeral, lookup, toEphemeral } from 'redux-ephemeral';
+import mount, { createEphemeral, destroyEphemeral, lookup, toEphemeral } from 'redux-ephemeral';
 
 import './index.html';
 
@@ -27,72 +27,108 @@ function mergeStateUpdate(state, action) {
   return {...state, ...action.payload.updates};
 }
 
-export function withProps(key, initialPrivateProps, component) {
+function mergeSelectors(...selectors) {
+  if (!selectors.find(f => typeof f === 'function'))
+    return null;
 
-  const getPrivateKey =
-    once(props => typeof key === 'function' ? key(props) : key);
+  return function(...args) {
+    const r = {};
 
-  function mapDispatchToSetProps(dispatch) {
-    return {
-      setProps(updates) {
-        const action = toEphemeral(
-          getPrivateKey(),
-          mergeStateUpdate,
-          {
-            type: 'UPDATE_PRIVATE_PROPS',
-            payload: { updates },
-          }
-        )
-
-        dispatch(action);
-      },
+    for (let i = 0; i < selectors.length; i++) {
+      Object.assign(r, selectors[i](...args));
     }
-  }
 
-  function mapStateToPrivateProps(state, ownProps) {
-    return {
-      private: {...lookup(state.lcl, getPrivateKey(ownProps))},
-      ...ownProps,
+    return r;
+  }
+}
+
+function noop() {}
+
+export function withProps({
+    key = null,
+    initialPrivateProps = {},
+    mapStateToProps = null,
+    mapDispatchToProps = null,
+    mergeProps = null,
+} = {}) {
+  return function (component) {
+
+    const getPrivateKey =
+      once(props => typeof key === 'function' ? key(props) : key);
+
+    function mapDispatchToSetProps(dispatch) {
+      return {
+        setProps(updates) {
+          const action = toEphemeral(
+            getPrivateKey(),
+            mergeStateUpdate,
+            {
+              type: 'UPDATE_PRIVATE_PROPS',
+              payload: { updates },
+            }
+          )
+
+          dispatch(action);
+        },
+      }
+    }
+
+    function mapStateToPrivateProps(state, ownProps) {
+      return {
+        private: {...lookup(state.lcl, getPrivateKey(ownProps))},
+        ...ownProps,
+      };
+    }
+
+    class WithSetProps extends Component {
+      constructor(props, context) {
+        super(props, context);
+        if (!props.store && !context.store)
+          throw new Error('`Store` must be accessible either in props or context');
+
+        // Set private key for this component.
+        this.privateKey = getPrivateKey(props);
+
+        createEphemeral(this.privateKey, initialPrivateProps || {});
+      }
+
+      componentWillUnmount() {
+        destroyEphemeral(this.privateKey);
+      }
+
+      getStore() {
+        return this.props.store || this.context.store;
+      }
+
+      render() {
+        return createElement(component, this.props);
+      }
+    }
+
+    WithSetProps.contextTypes = {
+      store: React.PropTypes.object,
     };
+
+    WithSetProps.propTypes = {
+      store: React.PropTypes.object,
+    };
+
+    const finalMapStateToProps = mergeSelectors(
+      mapStateToProps,
+      mapStateToPrivateProps
+    );
+
+    const finalMapDispatchToProps = mergeSelectors(
+      mapDispatchToProps,
+      mapDispatchToSetProps
+    );
+
+    const WithSetPropsConnected = connect(
+      mapStateToPrivateProps: finalMapStateToProps,
+      mapDispatchToSetProps: finalMapDispatchToProps,
+      mergeProps,
+    )(WithSetProps);
+
+    return hoistNonReactStatics(WithSetPropsConnected, component);
   }
-
-  class WithSetProps extends Component {
-    constructor(props, context) {
-      super(props, context);
-      if (!props.store && !context.store)
-        throw new Error('`Store` must be accessible either in props or context');
-
-      // Set private key for this component.
-      this.privateKey = getPrivateKey(props);
-
-      createEphemeral(this.privateKey, initialPrivateProps || {});
-    }
-
-    componentWillUnmount() {
-      destroyEphemeral(this.privateKey);
-    }
-
-    getStore() {
-      return this.props.store || this.context.store;
-    }
-
-    render() {
-      return createElement(component, this.props);
-    }
-  }
-
-  WithSetProps.contextTypes = {
-    store: React.PropTypes.object,
-  };
-
-  WithSetProps.propTypes = {
-    store: React.PropTypes.object,
-  };
-
-  const WithSetPropsConnected = connect(
-    mapStateToPrivateProps,
-    mapDispatchToSetProps,
-  )(WithSetProps);
-
-  return hoistNonReactStatics(WithSetPropsConnected, component);
 }
