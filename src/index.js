@@ -1,75 +1,83 @@
 import React, { createElement, Component } from 'react';
 import hoistNonReactStatics from 'hoist-non-react-statics';
 import { connect } from 'react-redux';
+import mount, { createEphemeral, lookup, toEphemeral } from 'redux-ephemeral';
 
 import './index.html';
 
-const PRIVATE_PROPS_NAMESPACE = '@private-props';
-
-export function privatePropsReducer(state = {}, action) {
-  const namespaceRegex = new RegExp(`^${PRIVATE_PROPS_NAMESPACE}`);
-  if (!namespaceRegex.test(action.type)) return state;
-
-  const newState = Object.assign({}, state);
-  const { privateKey } = action.payload;
-  if (!newState[privateKey]) newState[privateKey] = {};
-  const prevPrivate = newState[privateKey];
-  newState[privateKey] = Object.assign({}, prevPrivate, action.payload.updates);
-
-  return newState;
+export function enhanceWithPrivateProps(reducer) {
+  return mount('lcl', reducer);
 }
 
-export function withProps(key, component) {
-
+function once(f) {
   let firstRun = true;
+  let r = null;
 
-  const getPrivateKey = (props) => {
-    let result;
-
+  return (...args) => {
     if (firstRun) {
-      result = typeof key === 'function' ?
-        key(props) :
-        key;
+      r = f(...args);
+      firstRun = false;
     }
 
-    return result;
+    return r;
+  }
+}
+
+function mergeStateUpdate(state, action) {
+  return {...state, ...action.payload.updates};
+}
+
+export function withProps(key, initialPrivateProps, component) {
+
+  const getPrivateKey =
+    once(props => typeof key === 'function' ? key(props) : key);
+
+  function mapDispatchToSetProps(dispatch) {
+    return {
+      setProps(updates) {
+        const action = toEphemeral(
+          getPrivateKey(),
+          mergeStateUpdate,
+          {
+            type: 'UPDATE_PRIVATE_PROPS',
+            payload: { updates },
+          }
+        )
+
+        dispatch(action);
+      },
+    }
+  }
+
+  function mapStateToPrivateProps(state, ownProps) {
+    return {
+      private: {...lookup(state.lcl, getPrivateKey(ownProps))},
+      ...ownProps,
+    };
   }
 
   class WithSetProps extends Component {
     constructor(props, context) {
       super(props, context);
       if (!props.store && !context.store)
-        throw new Error('Yo!');
+        throw new Error('`Store` must be accessible either in props or context');
 
       // Set private key for this component.
       this.privateKey = getPrivateKey(props);
+
+      createEphemeral(this.privateKey, initialPrivateProps || {});
+    }
+
+    componentWillUnmount() {
+      destroyEphemeral(this.privateKey);
     }
 
     getStore() {
       return this.props.store || this.context.store;
     }
 
-    setProps(updates) {
-      this.getStore().dispatch({
-        type: `${PRIVATE_PROPS_NAMESPACE}/SET_PROPS`,
-        payload: {
-          privateKey: this.privateKey,
-          updates,
-        },
-      });
-    }
-
-    getPrivatePropsFromState() {
-      return this.getStore().getState().private[this.privateKey] || {};
-    }
-
     render() {
-      const props = Object.assign({}, this.props, {
-        private: this.getPrivatePropsFromState(),
-        setPrivate: this.setProps.bind(this),
-      });
-
-      return createElement(component, props);
+      return createElement(component, this.props);
     }
   }
 
@@ -82,9 +90,8 @@ export function withProps(key, component) {
   };
 
   const WithSetPropsConnected = connect(
-    function mapStateToProps(state, ownProps) {
-      return state.private[getPrivateKey(ownProps)] || {};
-    }
+    mapStateToPrivateProps,
+    mapDispatchToSetProps,
   )(WithSetProps);
 
   return hoistNonReactStatics(WithSetPropsConnected, component);
