@@ -42,8 +42,6 @@ function mergeSelectors(...selectors) {
   }
 }
 
-function noop() {}
-
 export function withProps({
     key = null,
     initialPrivateProps = {},
