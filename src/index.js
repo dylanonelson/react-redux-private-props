@@ -99,12 +99,16 @@ export function withProps({
         if (!props.store && !context.store)
           throw new Error('`Store` must be accessible either in props or context');
 
-        k = props.key
-          ? `${component.name}.${props.key}`
-          : component.name;
+        k = component.name;
+
+        k = typeof key === 'function'
+          ? `${k}.${key(props)}`
+          : typeof key === 'string'
+          ? `${k}.${key}`
+          : k;
 
         k = context.parentKey
-          ? `${k}.${context.parentKey}`
+          ? `${context.parentKey}.${k}`
           : k;
 
         createEphemeral(k, initialPrivateProps || {});
@@ -125,6 +129,7 @@ export function withProps({
 
     WithSetProps.contextTypes = {
       store: React.PropTypes.object,
+      parentKey: React.PropTypes.string,
     };
 
     WithSetProps.displayName = `WithSetProps(${component.name || 'Component'})`;
