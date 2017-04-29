@@ -118,6 +118,12 @@ export function withProps({
         destroyEphemeral(k);
       }
 
+      getChildContextTypes() {
+        return {
+          parentKey: k,
+        };
+      }
+
       getStore() {
         return this.props.store || this.context.store;
       }
@@ -129,6 +135,10 @@ export function withProps({
 
     WithSetProps.contextTypes = {
       store: React.PropTypes.object,
+      parentKey: React.PropTypes.string,
+    };
+
+    WithSetProps.childContextTypes = {
       parentKey: React.PropTypes.string,
     };
 
