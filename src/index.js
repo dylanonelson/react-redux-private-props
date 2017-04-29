@@ -61,6 +61,8 @@ export function withProps({
 } = {}) {
   return function (component) {
 
+    // `k` is the component key, which will ultimately be derived from props
+    // and context.
     let k = null;
 
     function mapDispatchToSetProps(dispatch) {
