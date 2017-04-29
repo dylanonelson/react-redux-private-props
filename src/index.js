@@ -116,10 +116,6 @@ export function withProps({
         };
       }
 
-      getStore() {
-        return this.props.store || this.context.store;
-      }
-
       render() {
         return createElement(component, this.props);
       }
