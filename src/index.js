@@ -19,20 +19,6 @@ export function combineWithPrivateProps(key, reducersObj) {
   });
 }
 
-function once(f) {
-  let firstRun = true;
-  let r = null;
-
-  return (...args) => {
-    if (firstRun) {
-      r = f(...args);
-      firstRun = false;
-    }
-
-    return r;
-  }
-}
-
 function mergeStateUpdate(state, action) {
   return {...state, ...action.payload.updates};
 }
