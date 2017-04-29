@@ -119,7 +119,7 @@ export function withProps({
         destroyEphemeral(k);
       }
 
-      getChildContextTypes() {
+      getChildContext() {
         return {
           parentKey: k,
         };
