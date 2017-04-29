@@ -61,14 +61,13 @@ export function withProps({
 } = {}) {
   return function (component) {
 
-    const getPrivateKey =
-      once(props => typeof key === 'function' ? key(props) : key);
+    let k = null;
 
     function mapDispatchToSetProps(dispatch) {
       return {
         setProps(updates) {
           const action = toEphemeral(
-            getPrivateKey(),
+            k,
             mergeStateUpdate,
             {
               type: 'UPDATE_PRIVATE_PROPS',
@@ -82,8 +81,12 @@ export function withProps({
     }
 
     function mapStateToPrivateProps(state, ownProps) {
+      const privateState = k
+        ? {...lookup(state[PRIVATE_PROPS_ROOT_KEY], k)}
+        : initialPrivateProps;
+
       return {
-        private: {...lookup(state[PRIVATE_PROPS_ROOT_KEY], getPrivateKey(ownProps))},
+        private: privateState,
         ...ownProps,
       };
     }
@@ -94,14 +97,19 @@ export function withProps({
         if (!props.store && !context.store)
           throw new Error('`Store` must be accessible either in props or context');
 
-        // Set private key for this component.
-        this.privateKey = getPrivateKey(props);
+        k = props.key
+          ? `${component.name}.${props.key}`
+          : component.name;
 
-        createEphemeral(this.privateKey, initialPrivateProps || {});
+        k = context.parentKey
+          ? `${k}.${context.parentKey}`
+          : k;
+
+        createEphemeral(k, initialPrivateProps || {});
       }
 
       componentWillUnmount() {
-        destroyEphemeral(this.privateKey);
+        destroyEphemeral(k);
       }
 
       getStore() {
@@ -117,7 +125,7 @@ export function withProps({
       store: React.PropTypes.object,
     };
 
-    WithSetProps.displayName =  `WithSetProps(${component.name || 'Component'})`;
+    WithSetProps.displayName = `WithSetProps(${component.name || 'Component'})`;
 
     WithSetProps.propTypes = {
       store: React.PropTypes.object,
