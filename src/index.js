@@ -14,6 +14,11 @@ export function combineWithPrivateProps(key, reducersObj) {
     PRIVATE_PROPS_ROOT_KEY = key;
   }
 
+  if (reducersObj[PRIVATE_PROPS_ROOT_KEY])
+    throw new Error(`Reducer for key ${PRIVATE_PROPS_ROOT_KEY} is alread defined,
+                    but \`combineWithPrivateProps\` needs to assign a reducer to
+                    it.`);
+
   return Object.assign(reducersObj, {
     [PRIVATE_PROPS_ROOT_KEY]: ephemeralReducer,
   });
