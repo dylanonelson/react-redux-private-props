@@ -45,7 +45,8 @@ function mergeSelectors(...selectors) {
     const r = {};
 
     for (let i = 0; i < selectors.length; i++) {
-      Object.assign(r, selectors[i](...args));
+      if (typeof selectors[i] === 'function')
+        Object.assign(r, selectors[i](...args));
     }
 
     return r;
@@ -159,9 +160,9 @@ export function withProps({
     );
 
     const WithSetPropsConnected = connect(
-      mapStateToPrivateProps: finalMapStateToProps,
-      mapDispatchToSetProps: finalMapDispatchToProps,
-      mergeProps,
+      finalMapStateToProps,
+      finalMapDispatchToProps,
+      mergeProps
     )(WithSetProps);
 
     return hoistNonReactStatics(WithSetPropsConnected, component);
