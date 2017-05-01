@@ -32,6 +32,7 @@ function mergeSelectors(...selectors) {
   if (!selectors.find(f => typeof f === 'function'))
     return null;
 
+  // TODO Maintain arity perf optimization in `connect`
   return function(...args) {
     const r = {};
 
