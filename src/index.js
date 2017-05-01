@@ -32,8 +32,12 @@ function mergeSelectors(...selectors) {
   if (!selectors.find(f => typeof f === 'function'))
     return null;
 
-  // TODO Maintain arity perf optimization in `connect`
-  return function(...args) {
+  const arity = selectors.reduce((m, f) => {
+    if (f.length > m) m = f.length;
+    return m;
+  }, 0);
+
+  const callSelectors = (...args) => {
     const r = {};
 
     for (let i = 0; i < selectors.length; i++) {
@@ -42,6 +46,27 @@ function mergeSelectors(...selectors) {
     }
 
     return r;
+  }
+
+  // react-redux checks the arity of the functions passed for mapStateToProps,
+  // mapDispatchToProps, and mergeProps to see whether they depend on both
+  // state and props. Maintain this performance optimization by minimizing the
+  // number of arguments our selector takes.
+  switch(m) {
+    case 1: return function(arg1, arg2) {
+      return callSelectors(arg1, arg2);
+    }
+    case 2: return function(arg1, arg2, arg3) {
+      return callSelectors(arg1, arg2, arg3);
+    }
+    case 3: return function(arg1, arg2, arg3) {
+      return callSelectors(arg1, arg2, arg3);
+    }
+    // Functions with an arity of 0 receive all args by default
+    case 0:
+    default: return function(...args) {
+      return callSelectors(...args);
+    }
   }
 }
 
