@@ -36,9 +36,6 @@ function mergeStateUpdate(state, action) {
 export function withProps({
     key = null,
     initialPrivateProps = {},
-    mapStateToProps = null,
-    mapDispatchToProps = null,
-    mergeProps = null,
 } = {}) {
   return function (component) {
 
@@ -111,6 +108,7 @@ export function withProps({
 
           if (privateProps !== this.privateProps) {
             this.privateProps = privateProps;
+            // Schedule a render by setting dummy state
             this.setState({});
           }
         });
