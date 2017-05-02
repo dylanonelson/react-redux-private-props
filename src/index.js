@@ -1,7 +1,12 @@
-import React, { createElement, Component } from 'react';
+import {
+  createEphemeral,
+  destroyEphemeral,
+  lookup,
+  toEphemeral,
+  ephemeralReducer,
+} from 'redux-ephemeral';
 import hoistNonReactStatics from 'hoist-non-react-statics';
-import { connect } from 'react-redux';
-import { createEphemeral, destroyEphemeral, lookup, toEphemeral, ephemeralReducer } from 'redux-ephemeral';
+import React, { createElement, Component } from 'react';
 
 import './index.html';
 
@@ -28,48 +33,6 @@ function mergeStateUpdate(state, action) {
   return {...state, ...action.payload.updates};
 }
 
-function mergeSelectors(...selectors) {
-  if (!selectors.find(f => typeof f === 'function'))
-    return null;
-
-  const arity = selectors.reduce((m, f) => {
-    if (f.length > m) m = f.length;
-    return m;
-  }, 0);
-
-  const callSelectors = (...args) => {
-    const r = {};
-
-    for (let i = 0; i < selectors.length; i++) {
-      if (typeof selectors[i] === 'function')
-        Object.assign(r, selectors[i](...args));
-    }
-
-    return r;
-  }
-
-  // react-redux checks the arity of the functions passed for mapStateToProps,
-  // mapDispatchToProps, and mergeProps to see whether they depend on both
-  // state and props. Maintain this performance optimization by minimizing the
-  // number of arguments our selector takes.
-  switch(m) {
-    case 1: return function(arg1, arg2) {
-      return callSelectors(arg1, arg2);
-    }
-    case 2: return function(arg1, arg2, arg3) {
-      return callSelectors(arg1, arg2, arg3);
-    }
-    case 3: return function(arg1, arg2, arg3) {
-      return callSelectors(arg1, arg2, arg3);
-    }
-    // Functions with an arity of 0 receive all args by default
-    case 0:
-    default: return function(...args) {
-      return callSelectors(...args);
-    }
-  }
-}
-
 export function withProps({
     key = null,
     initialPrivateProps = {},
@@ -83,39 +46,21 @@ export function withProps({
     // and context.
     let k = null;
 
-    function mapDispatchToSetProps(dispatch) {
-      return {
-        setProps(updates) {
-          const action = toEphemeral(
-            k,
-            mergeStateUpdate,
-            {
-              type: 'UPDATE_PRIVATE_PROPS',
-              payload: { updates },
-            }
-          )
-
-          dispatch(action);
-        },
-      }
-    }
-
-    function mapStateToPrivateProps(state, ownProps) {
-      const privateState = k
-        ? {...lookup(state[PRIVATE_PROPS_ROOT_KEY], k)}
-        : initialPrivateProps;
-
-      return {
-        private: privateState,
-        ...ownProps,
-      };
-    }
-
     class WithSetProps extends Component {
       constructor(props, context) {
         super(props, context);
-        if (!props.store && !context.store)
-          throw new Error('`Store` must be accessible either in props or context');
+
+        if (!this.getStore())
+          throw new Error(`\`Store\` must be accessible either in props or
+                          context to add private props to ${component.name}`);
+
+        this.buildKey();
+        this.initializePrivateProps();
+        this.initializeSubscription();
+      }
+
+      buildKey() {
+        const { props, context } = this;
 
         k = component.name;
 
@@ -128,12 +73,19 @@ export function withProps({
         k = context.parentKey
           ? `${context.parentKey}.${k}`
           : k;
-
-        createEphemeral(k, initialPrivateProps || {});
       }
 
       componentWillUnmount() {
+        this.unsubscribe && this.unsubscribe();
         destroyEphemeral(k);
+      }
+
+      get privateProps() {
+        if (!this._privateProps) {
+          this._privateProps = {};
+        }
+
+        return this._privateProps;
       }
 
       getChildContext() {
@@ -142,8 +94,53 @@ export function withProps({
         };
       }
 
+      getStore() {
+        return this.props.store || this.context.store;
+      }
+
+      initializePrivateProps() {
+        createEphemeral(k, initialPrivateProps || {});
+      }
+
+      initializeSubscription() {
+        const store = this.getStore();
+
+        this.unsubscribe = store.subscribe(() => {
+          const state = store.getState();
+          const privateProps = lookup(state[PRIVATE_PROPS_ROOT_KEY], k);
+
+          if (privateProps !== this.privateProps) {
+            this.privateProps = privateProps;
+            this.setState({});
+          }
+        });
+      }
+
       render() {
-        return createElement(component, this.props);
+        return createElement(
+          component, {
+            ...this.props,
+            ...{ private: this.privateProps },
+            ...{ setProps: this.setProps.bind(this) },
+          }
+        );
+      }
+
+      set privateProps(props) {
+        this._privateProps = props;
+      }
+
+      setProps(updates) {
+        const action = toEphemeral(
+          k,
+          mergeStateUpdate,
+          {
+            type: 'UPDATE_PRIVATE_PROPS',
+            payload: { updates },
+          }
+        );
+
+        this.getStore().dispatch(action);
       }
     }
 
@@ -162,22 +159,6 @@ export function withProps({
       store: React.PropTypes.object,
     };
 
-    const finalMapStateToProps = mergeSelectors(
-      mapStateToProps,
-      mapStateToPrivateProps
-    );
-
-    const finalMapDispatchToProps = mergeSelectors(
-      mapDispatchToProps,
-      mapDispatchToSetProps
-    );
-
-    const WithSetPropsConnected = connect(
-      finalMapStateToProps,
-      finalMapDispatchToProps,
-      mergeProps
-    )(WithSetProps);
-
-    return hoistNonReactStatics(WithSetPropsConnected, component);
+    return hoistNonReactStatics(WithSetProps, component);
   }
 }
